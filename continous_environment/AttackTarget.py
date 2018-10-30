@@ -46,6 +46,7 @@ class AttackTarget(gym.Env):
         self.observation_space = spaces.Box(
             self.min_pos, self.max_pos, dtype=np.float32)
 
+        self.ERROR_THRESHOLD = 10
         self.seed()
         self.viewer = None
         self.state = None
@@ -61,7 +62,8 @@ class AttackTarget(gym.Env):
         X0, Y0 = self.target_pos[0], self.target_pos[1]
 
         reward = -np.sqrt((X1 - X0)**2 + (Y1 - Y0)**2)/100
-        if reward > -0.05:
+        
+        if np.absolute(X1-X0)<self.ERROR_THRESHOLD and np.absolute(Y1-Y0)<self.ERROR_THRESHOLD:
             reward += 10
             done = True
         else:
@@ -101,7 +103,7 @@ class AttackTarget(gym.Env):
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
     def reset(self):
-        self.target_pos = np.array([70., 80.])
+        self.target_pos = np.array([10., 80.])
         self.state = np.array([10.,10.])
         # self.state = np.random.rand(2) * 100
         return self.state
