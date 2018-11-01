@@ -1,15 +1,8 @@
 import math
 import gym
-from gym import spaces, logger
-from gym.utils import seeding
+from gym import spaces
 import numpy as np
 import time
-
-
-HIGH_POS = 100.0
-LOW_POS = 0
-HIGH_VEL = 1.0
-LOW_VEL = -1.0
 
 
 class AttackTargetEnv(gym.Env):
@@ -19,10 +12,15 @@ class AttackTargetEnv(gym.Env):
     Observation:
         Type: Box(2)
         Num Observation    Min    Max
-        0   Position in X  0      100
-        1   Position in Y  0      100
+        0   Agent's pos_x  -50    50
+        1   Agent's pos_y  -50    50
+        2   Target's pos_x -50    50
+        3   Target's pos_y -50    50 
+        4   absolute distance in X 0 100
+        5   absolute distance in Y 0 100
+        6   distance        0     140
     Actions:
-        Type: Discrete(2)
+        Type: Discrete(4)
         Num Action        
         0   Velocity is 1 in X  
         1   Velocity is -1 in X  
@@ -30,96 +28,134 @@ class AttackTargetEnv(gym.Env):
         3   Velocity is -1 in Y
     Reward: 
         If Agent is closer to the target, the reward is bigger.
-        Simplicilty, set reward is -log(((PosX-X0)^2+(PosY-Y0)^2)/2)+4
+        Simplicilty, set reward is -np.sqrt((X1-X0)**2+(Y1-Y0)**2)/100
     Starting State:
-        Target is randomly located in [X0, Y0], where X0 and Y0 range in [0, 100]
+        Target is randomly located in [X0, Y0], where X0 and Y0 range in [-50, 50]
     Episode Termination:
         Agent achieves the target, which means reward is bigger than 
     """
     metadata = {
         'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second': 50
+        'video.frames_per_second': 2
     }
 
     def __init__(self):
 
-        high_pos = np.array([HIGH_POS, HIGH_POS])
-        low_pos = np.array([LOW_POS, LOW_POS])
-        self.action_space = spaces.Discrete(4)
+        self.high_pos = np.array([50, 50])
+        self.low_pos = -self.high_pos
+        self.action_space = spaces.Discrete(5)
         self.observation_space = spaces.Box(
-            low_pos, high_pos, dtype=np.float32)
-        self.reward_threshold = 100000
-        self.seed()
+            self.low_pos, self.high_pos, dtype=np.float32)
+
         self.viewer = None
         self.state = None
-        self.index = 0
 
-    def seed(self, seed=None):
-        self.np_random, seed = seeding.np_random(seed)
-        return [seed]
 
     def step(self, action):
         assert self.action_space.contains(
             action), "action: {0}, type: {1} is invalid".format(action, type(action))
-        state = self.state
-        pos_x1_old = state[0]   #store the old X position
-        pos_y1_old = state[1]   #store the old Y position
-        state_alpha = {
-            0: np.array([1, 0]), 
-            1: np.array([-1, 0]),
-            2: np.array([0, 1]), 
-            3: np.array([0, -1])
-        }
+        if action == 0:
+            self.state += np.array([1, 0])
+        elif action == 1:
+            self.state += np.array([-1, 0])
+        elif action == 2:
+            self.state += np.array([0, 1])
+        elif action == 3:
+            self.state += np.array([0, -1])
+        elif action == 4:
+            self.state += 0
+        # self.state = np.clip(
+        #     self.state, self.observation_space.low, self.observation_space.high)
 
-        next_state = state + state_alpha[action]
-        # Edge detection
-        # next_state = np.clip(next_state, LOW_POS, HIGH_POS)
-        next_state[next_state > 100] = 100
-        next_state[next_state < 0] = 0
-        self.index += 1
-        self.state = next_state
-        pos_x1_new = self.state[0]  #store the new X position
-        pos_y1_new = self.state[1]  #store the new Y position
-        pos_x0 = self.target_pos[0]
-        pos_y0 = self.target_pos[1]
-        # reward = -np.log10(((pos_x1 - pos_x0)**2 +
-        #                     (pos_y1 - pos_y0)**2) / 2) + 4
-        
-        # reward =1/np.sqrt((pos_x1-pos_x0)**2+(pos_y1-pos_y0)**2)
-        reward_old = 1/(np.abs(pos_x1_old-pos_x0)+np.abs(pos_y1_old-pos_y0))
-        reward_new = 1/(np.abs(pos_x1_new-pos_x0)+np.abs(pos_y1_new-pos_y0))
-        reward = reward_old-reward_new
-        if reward > self.reward_threshold:
+        # # reward style #1
+        # X1, Y1 = self.state
+        # X0, Y0 = self.target_pos
+        # reward = -np.sqrt((X1 - X0)**2 + (Y1 - Y0)**2) / 100
+        # # print("Agent: {0}, Target: {1}, reward: {2}".format(self.state, self.target_pos, reward))
+        # if np.abs(X1 - X0) + np.abs(Y1 - Y0) < 5:
+        #     done = True
+        # else:
+        #     done = False
+
+        # # reward style #2
+        # X1, Y1 = self.state
+        # X0, Y0 = self.target_pos
+        # done = (np.abs(X1-X0)+np.abs(Y1-Y0)<=1)
+        # if not done:
+        #     reward = -0.1
+        # else:
+        #     reward = 10
+
+
+        # #reward style #3
+        # X1, Y1 = self.state
+        # X0, Y0 = self.target_pos
+        # done = (np.abs(X1-X0)+np.abs(Y1-Y0)<=1) 
+        # if not done:
+        #     reward = -0.1
+        # else:
+        #     reward = 10
+
+        # #reward style #4
+        # X1, Y1 = self.state
+        # X0, Y0 = self.target_pos
+        # reward = -np.sqrt((X1-X0)**2+(Y1-Y0)**2)/20
+        # done = np.abs(X1-X0)+np.abs(Y1-Y0)<= 1
+        # if done:
+        #     reward += 20
+        # else:
+        #     reward -= 0.05
+
+        #reward style #5
+        self.state = np.clip(self.state, -50, 50)
+
+        X1, Y1 = self.state
+        X0, Y0 = self.target_pos
+        dist = np.sqrt((X1-X0)**2+(Y1-Y0)**2)
+        reward = -dist/20.
+        if dist < 15.:
             done = True
+            reward += 20
         else:
             done = False
+            reward -= 0.05
+
+        
+
+
+        # self.state = np.concatenate(X1, Y1, X0, Y0, abs(X1-X0), abs(Y1-Y0), np.sqrt((X1-X0)**2+(Y1-Y0)**2)/20)   
+
+        # print(self.state, action, reward, done)
         return self.state, reward, done, {}
 
     def reset(self):
-        # random set tartget pos in range(0, 100)
-        self.target_pos = np.random.rand(2) * 100
-        # random set agent pos in range (0, 100)
-        self.state = np.random.rand(2) * 100
+        # random set tartget pos in range (-50, 50)
+        self.target_pos = np.array([0., 0.])
+        # random set agent pos in range (-50, 50)
+        self.state = np.array([30., -20.])
+        
+        
 
         return self.state
 
     def render(self, mode='human'):
-        screen_width = screen_height = 600
-        scale = screen_width / (HIGH_POS - LOW_POS)
+        screen_width = self.high_pos[0] - self.low_pos[0]
+        screen_height = self.high_pos[1] - self.low_pos[1]
+        cart_origin = np.zeros(2) - self.low_pos
 
         if self.viewer is None:
             from gym.envs.classic_control import rendering
             self.viewer = rendering.Viewer(screen_width, screen_height)
-            self.draw_agent = rendering.make_circle(30)
+            self.draw_agent = rendering.make_circle(5)
             self.draw_agent.set_color(0.5, 0.5, 0.8)
-            self.trans_agent = rendering.Transform(translation=(100, 100))
+            self.trans_agent = rendering.Transform()
             self.draw_agent.add_attr(self.trans_agent)
             self.viewer.add_geom(self.draw_agent)
 
-            draw_target = rendering.make_circle(30)
+            draw_target = rendering.make_circle(5)
             draw_target.set_color(1, 1, 0)
-            cart_target_x = scale * self.target_pos[0]
-            cart_target_y = scale * self.target_pos[1]
+            cart_target_x = self.target_pos[0] + cart_origin[0]
+            cart_target_y = self.target_pos[1] + cart_origin[1]
             trans_target = rendering.Transform(
                 translation=(cart_target_x, cart_target_y))
             draw_target.add_attr(trans_target)
@@ -128,8 +164,8 @@ class AttackTargetEnv(gym.Env):
         if self.state is None:
             return None
 
-        cart_agent_x = scale * self.state[0]
-        cart_agent_y = scale * self.state[1]
+        cart_agent_x = self.state[0] + cart_origin[0]
+        cart_agent_y = self.state[1] + cart_origin[1]
         self.trans_agent.set_translation(cart_agent_x, cart_agent_y)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
@@ -157,4 +193,3 @@ class AttackTargetEnv(gym.Env):
 #                 state, env.target_pos))
 #             time.sleep(5)
 #             break
-
